@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0"
+>
+
+<title>マップ</title>
+
+<style>
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 20px;
+  font-family: sans-serif;
+  background: #f4f5f7;
+}
+
+#mapContainer {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+
+#baseImage {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.marker {
+  position: absolute;
+
+  width: 24px;
+  height: 24px;
+
+  transform:
+    translate(-50%, -50%);
+
+  background: #ef4444;
+
+  border: 3px solid white;
+
+  border-radius: 50%;
+
+  box-shadow:
+    0 2px 8px
+    rgba(0,0,0,0.3);
+
+  cursor: pointer;
+
+  z-index: 10;
+}
+
+.marker:hover {
+  transform:
+    translate(-50%, -50%)
+    scale(1.2);
+}
+
+#preview {
+  position: fixed;
+
+  display: none;
+
+  width: 300px;
+
+  padding: 10px;
+
+  background: white;
+
+  border-radius: 10px;
+
+  box-shadow:
+    0 10px 30px
+    rgba(0,0,0,0.3);
+
+  z-index: 9999;
+
+  pointer-events: none;
+}
+
+#preview img {
+  display: block;
+  width: 100%;
+  border-radius: 8px;
+}
+
+#message {
+  padding: 30px;
+  text-align: center;
+  color: #666;
+}
+
+</style>
+
+</head>
+
+
+<body>
+
+
+<h1>マップ</h1>
+
+
+<div id="message">
+  マップを読み込んでいます...
+</div>
+
+
+<div id="mapContainer">
+
+  <img
+    id="baseImage"
+    alt="マップ"
+  >
+
+</div>
+
+
+<div id="preview">
+
+  <img
+    id="previewImage"
+    alt="ポイント画像"
+  >
+
+</div>
+
+
+<script>
+
+/*
+========================================
+GoogleスプレッドシートのCSV URL
+========================================
+*/
+
+const SHEET_CSV_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vQZ3bjBhmuAX8rBQMhxLEKlY030en9mgcKKcJWepAV4Y6rZ0PV7MO6eYcquDmTT7HHqfz0EWKDC-b0Q/pub?gid=0&single=true&output=csv";
+
+
+/*
+========================================
+URLからmap_idを取得
+========================================
+*/
+
+const params =
+  new URLSearchParams(
+    window.location.search
+  );
+
+
+const mapId =
+  params.get("map");
+
+
+/*
+========================================
+HTML要素
+========================================
+*/
+
+const baseImage =
+  document.getElementById(
+    "baseImage"
+  );
+
+
+const mapContainer =
+  document.getElementById(
+    "mapContainer"
+  );
+
+
+const preview =
+  document.getElementById(
+    "preview"
+  );
+
+
+const previewImage =
+  document.getElementById(
+    "previewImage"
+  );
+
+
+const message =
+  document.getElementById(
+    "message"
+  );
+
+
+/*
+========================================
+CSVを取得
+========================================
+*/
+
+fetch(SHEET_CSV_URL)
+
+  .then(function(response) {
+
+    if (!response.ok) {
+
+      throw new Error(
+        "スプレッドシートを取得できませんでした"
+      );
+
+    }
+
+    return response.text();
+
+  })
+
+  .then(function(csv) {
+
+    const rows =
+      parseCSV(csv);
+
+    loadMap(rows);
+
+  })
+
+  .catch(function(error) {
+
+    console.error(error);
+
+    message.textContent =
+      "マップを読み込めませんでした。";
+
+  });
+
+
+/*
+========================================
+CSVを簡易解析
+========================================
+*/
+
+function parseCSV(csv) {
+
+  const lines =
+    csv
+      .trim()
+      .split(/\r?\n/);
+
+
+  const headers =
+    lines[0]
+      .split(",")
+      .map(function(header) {
+
+        return header.trim();
+
+      });
+
+
+  const result = [];
+
+
+  for (
+    let i = 1;
+    i < lines.length;
+    i++
+  ) {
+
+    const values =
+      lines[i].split(",");
+
+
+    const row = {};
+
+
+    headers.forEach(
+      function(header, index) {
+
+        row[header] =
+          values[index]
+            ? values[index].trim()
+            : "";
+
+      }
+    );
+
+
+    result.push(row);
+
+  }
+
+
+  return result;
+
+}
+
+
+/*
+========================================
+マップを読み込む
+========================================
+*/
+
+function loadMap(rows) {
+
+
+  if (!mapId) {
+
+    message.textContent =
+      "マップIDが指定されていません。";
+
+    return;
+
+  }
+
+
+  /*
+   * 指定されたmap_idだけ取得
+   */
+
+  const mapRows =
+    rows.filter(
+      function(row) {
+
+        return row.map_id === mapId;
+
+      }
+    );
+
+
+  if (mapRows.length === 0) {
+
+    message.textContent =
+      "指定されたマップがありません。";
+
+    return;
+
+  }
+
+
+  /*
+   * ベース画像
+   */
+
+  const baseImageURL =
+    mapRows[0].base_image;
+
+
+  if (!baseImageURL) {
+
+    message.textContent =
+      "ベース画像が設定されていません。";
+
+    return;
+
+  }
+
+
+  baseImage.src =
+    baseImageURL;
+
+
+  /*
+   * マーカー作成
+   */
+
+  mapRows.forEach(
+    function(row) {
+
+      createMarker(row);
+
+    }
+  );
+
+
+  /*
+   * 読み込み完了
+   */
+
+  message.style.display =
+    "none";
+
+}
+
+
+/*
+========================================
+マーカーを作成
+========================================
+*/
+
+function createMarker(row) {
+
+
+  const marker =
+    document.createElement("div");
+
+
+  marker.className =
+    "marker";
+
+
+  /*
+   * 座標
+   */
+
+  marker.style.left =
+    row.x + "%";
+
+
+  marker.style.top =
+    row.y + "%";
+
+
+  /*
+   * ポイント画像がある場合
+   */
+
+  if (row.point_image) {
+
+
+    marker.addEventListener(
+      "mouseenter",
+      function(event) {
+
+
+        previewImage.src =
+          row.point_image;
+
+
+        preview.style.display =
+          "block";
+
+
+        movePreview(event);
+
+
+      }
+    );
+
+
+    marker.addEventListener(
+      "mouseleave",
+      function() {
+
+        preview.style.display =
+          "none";
+
+      }
+    );
+
+  }
+
+
+  mapContainer.appendChild(
+    marker
+  );
+
+}
+
+
+/*
+========================================
+プレビュー位置
+========================================
+*/
+
+document.addEventListener(
+  "mousemove",
+  function(event) {
+
+    if (
+      preview.style.display ===
+      "block"
+    ) {
+
+      movePreview(event);
+
+    }
+
+  }
+);
+
+
+function movePreview(event) {
+
+  preview.style.left =
+    (event.clientX + 20) + "px";
+
+
+  preview.style.top =
+    (event.clientY + 20) + "px";
+
+}
+
+</script>
+
+
+</body>
+
+</html>
